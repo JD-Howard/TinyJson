@@ -1,25 +1,34 @@
-[Bb]in/
-[Oo]bj/
-[Dd]ebug/
-[Rr]elease/
-[Tt]est[Rr]esults
-[Tt]est-[Rr]esults/
-packages/
+# Project Folders
+/**/TestResults/**/*
+/**/packages/**/*
+/**/obj/**/*
+/**/bin/**/*
 
-.vs/
-*.userprefs
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+Thumbs.db
+ehthumbs.db
+
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+
+# IDEs and Editors
+/**/.idea/**/*
+/**/.vs/**/*
+/**/.vscode/**/*
 *.suo
 *.user
+*.userosscache
 *.sln.docstates
-*.userprefs
-*.meta
-*.obj
-*.pch
-*.pdb
-*.tmp
-*.log
-*.pidb
-*.DS_Store
-*.nupkg
-TestResult.xml
-
+*.swp
+*.swo
+*.bak

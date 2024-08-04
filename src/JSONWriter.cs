@@ -82,7 +82,13 @@ namespace TinyJson
             else if (type == typeof(DateTime))
             {
                 stringBuilder.Append('"');
-                stringBuilder.Append(((DateTime)item).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                stringBuilder.Append(((DateTime)item).ToString("O")); // use ISO 8601 format to preserve context
+                stringBuilder.Append('"');
+            }
+            else if (type == typeof(TimeSpan))
+            {
+                stringBuilder.Append('"');
+                stringBuilder.Append(((TimeSpan)item).ToString("c")); // This is not an ISO format
                 stringBuilder.Append('"');
             }
             else if (type.IsEnum)

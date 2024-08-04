@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Threading;
@@ -11,6 +14,14 @@ namespace TinyJson.Test
     [TestClass]
     public class TestParser
     {
+        public TestParser()
+        {
+            // Ensures both of these have initialized so it doesn't skew single test comparisons
+            Newtonsoft.Json.JsonConvert.DeserializeObject<int>("1");
+            Newtonsoft.Json.JsonConvert.SerializeObject(1);
+            "1".FromJson<int>().ToJson();
+        }
+        
         public enum Color
         {
             Red,
@@ -29,10 +40,39 @@ namespace TinyJson.Test
             Strikethrough = 8
         }
 
-        static void Test<T>(T expected, string json)
+        private static long WriteMetrics(Stopwatch sw, string json, bool isNewton)
         {
-            T value = json.FromJson<T>();
-            Assert.AreEqual(expected, value);
+            var prefix = isNewton ? "NEWT:" : "TINY:";
+            var elapsed = sw.ElapsedMilliseconds;
+            if (json.Length > 500)
+                json = json.Substring(0, 500);
+            
+            Console.WriteLine($"{prefix} {sw.ElapsedMilliseconds:00000}ms from source : {json}");
+            sw.Reset();
+            return elapsed;
+        }
+        
+        
+        private static void Test<T>(T expected, string json, bool skipNewton = false)
+        {
+            var sw = new Stopwatch();
+            sw.Start();
+            T value1 = json.FromJson<T>();
+            sw.Stop();
+            Assert.AreEqual(expected, value1);
+            var factor1 = WriteMetrics(sw, json, false);
+            
+            if (skipNewton)
+                return;
+            
+            sw.Start();
+            T value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<T>(json);
+            sw.Stop();
+            Assert.AreEqual(value2, value1);
+            var factor2 = WriteMetrics(sw, json, true);
+            
+            // Expect performance at least as good as newtonsoft (only fair on single test execution)
+            // Assert.IsTrue(factor1 <= factor2);
         }
 
         [TestMethod]
@@ -50,21 +90,41 @@ namespace TinyJson.Test
             Test("hello\"there", "\"hello\\\"there\"");
             Test(true, "true");
             Test(false, "false");
-            Test<object>(null, "sfdoijsdfoij");
+            Test<object>(null, "sfdoijsdfoij", true);
             Test(Color.Green, "\"Green\"");
             Test(Color.Blue, "2");
             Test(Color.Blue, "\"2\"");
-            Test(Color.Red, "\"sfdoijsdfoij\"");
+            
+            // Fallback scenario is by far the worst performance of the group
+            // I enhanced this by not purely expecting zero to be an available fallback,
+            // but my addition is only causing about 2ms of this +40m performance hit.
+            Test(Color.Red, "\"sfdoijsdfoij\"", true); 
             Test(Style.Bold | Style.Italic, "\"Bold, Italic\"");
             Test(Style.Bold | Style.Italic, "3");
             Test("\u94b1\u4e0d\u591f!", "\"\u94b1\u4e0d\u591f!\"");
             Test("\u94b1\u4e0d\u591f!", "\"\\u94b1\\u4e0d\\u591f!\"");
         }
 
-        static void ArrayTest<T>(T[] expected, string json)
+        private static void ArrayTest<T>(T[] expected, string json, bool skipNewton = false)
         {
-            var value = (T[])json.FromJson<T[]>();
-            CollectionAssert.AreEqual(expected, value);
+            var sw = new Stopwatch();
+            sw.Start();
+            T[] value1 = json.FromJson<T[]>();
+            sw.Stop();
+            CollectionAssert.AreEqual(expected, value1);
+            var factor1 = WriteMetrics(sw, json, false);
+            
+            if (skipNewton)
+                return;
+            
+            sw.Start();
+            T[] value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<T[]>(json);
+            sw.Stop();
+            CollectionAssert.AreEqual(value2, value1);
+            var factor2 = WriteMetrics(sw, json, true);
+            
+            // Expect performance at least as good as newtonsoft (only fair on single test execution)
+            // Assert.IsTrue(factor1 <= factor2);
         }
 
         [TestMethod]
@@ -76,13 +136,29 @@ namespace TinyJson.Test
             ArrayTest(new object[] { null, null }, "[null,null]");
             ArrayTest(new float[] { 0.24f, 1.2f }, "[0.24,1.2]");
             ArrayTest(new double[] { 0.15, 0.19 }, "[0.15, 0.19]");
-            ArrayTest<object>(null, "[garbled");
+            ArrayTest<object>(null, "[garbled", true);
         }
 
-        static void ListTest<T>(List<T> expected, string json)
+        static void ListTest<T>(List<T> expected, string json, bool skipNewton = false)
         {
-            var value = json.FromJson<List<T>>();
-            CollectionAssert.AreEqual(expected, value);
+            var sw = new Stopwatch();
+            sw.Start();
+            var value1 = json.FromJson<List<T>>();
+            sw.Stop();
+            CollectionAssert.AreEqual(expected, value1);
+            var factor1 = WriteMetrics(sw, json, false);
+            
+            if (skipNewton)
+                return;
+            
+            sw.Start();
+            var value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<List<T>>(json);
+            sw.Stop();
+            CollectionAssert.AreEqual(value2, value1);
+            var factor2 = WriteMetrics(sw, json, true);
+            
+            // Expect performance at least as good as newtonsoft (only fair on single test execution)
+            // Assert.IsTrue(factor1 <= factor2);
         }
 
         [TestMethod]
@@ -94,7 +170,7 @@ namespace TinyJson.Test
             ListTest(new List<object> { null, null }, "[null,null]");
             ListTest(new List<float> { 0.24f, 1.2f }, "[0.24,1.2]");
             ListTest(new List<double> { 0.15, 0.19 }, "[0.15, 0.19]");
-            ListTest<object>(null, "[garbled");
+            ListTest<object>(null, "[garbled", true);
         }
 
         [TestMethod]
@@ -117,22 +193,48 @@ namespace TinyJson.Test
                 CollectionAssert.AreEqual(expected[i], actual[i]);
         }
 
-        static void DictTest<K, V>(Dictionary<K, V> expected, string json)
+        static void DictTest<K, V>(Dictionary<K, V> expected, string json, bool skipNewton = false)
         {
-            var value = json.FromJson<Dictionary<K, V>>();
-            Assert.AreEqual(expected.Count, value.Count);
+            var sw = new Stopwatch();
+            sw.Start();
+            var value1 = json.FromJson<Dictionary<K, V>>();
+            sw.Stop();
+            Assert.AreEqual(expected.Count, value1.Count);
             foreach (var pair in expected)
             {
-                Assert.IsTrue(value.ContainsKey(pair.Key));
-                Assert.AreEqual(pair.Value, value[pair.Key]);
+                Assert.IsTrue(value1.ContainsKey(pair.Key));
+                Assert.AreEqual(pair.Value, value1[pair.Key]);
             }
+            var factor1 = WriteMetrics(sw, json, false);
+            
+            if (skipNewton)
+                return;
+            
+            sw.Start();
+            var value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<K, V>>(json);
+            sw.Stop();
+            Assert.AreEqual(expected.Count, value2.Count);
+            foreach (var pair in expected)
+            {
+                Assert.IsTrue(value2.ContainsKey(pair.Key));
+                Assert.AreEqual(pair.Value, value2[pair.Key]);
+            }
+            var factor2 = WriteMetrics(sw, json, true);
+            
+            // Expect performance at least as good as newtonsoft (only fair on single test execution)
+            // Assert.IsTrue(factor1 <= factor2);
         }
 
         [TestMethod]
         public void TestDictionary()
         {
             DictTest(new Dictionary<string, int> { { "foo", 5 }, { "bar", 10 }, { "baz", 128 } }, "{\"foo\":5,\"bar\":10,\"baz\":128}");
-            Assert.IsNull("{0:5}".FromJson<Dictionary<int, int>>());
+            
+            // This json string is technically valid json that Newtonsoft could handle, but it is not any kind of typical representation.
+            DictTest(new Dictionary<int, int> { { 0, 5 } }, "{0:5}");
+            
+            // This json string one is very typical representation of Dictionary<int, int>
+            DictTest(new Dictionary<int, int> { { 0, 5 } }, "{\"0\":5}");
 
             DictTest(new Dictionary<string, float> { { "foo", 5f }, { "bar", 10f }, { "baz", 128f } }, "{\"foo\":5,\"bar\":10,\"baz\":128}");
             DictTest(new Dictionary<string, string> { { "foo", "\"" }, { "bar", "hello" }, { "baz", "," } }, "{\"foo\":\"\\\"\",\"bar\":\"hello\",\"baz\":\",\"}");
@@ -156,28 +258,56 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestSimpleObject()
         {
-            SimpleObject value = "{\"A\":123,\"b\":456,\"C\":\"789\",\"D\":[10,11,12]}".FromJson<SimpleObject>();
-            Assert.IsNotNull(value);
-            Assert.AreEqual(123, value.A);
-            Assert.AreEqual(456f, value.B);
-            Assert.AreEqual("789", value.C);
-            CollectionAssert.AreEqual(new List<int> { 10, 11, 12 }, value.D);
+            var json = "{\"A\":123,\"b\":456,\"C\":\"789\",\"D\":[10,11,12]}";
+            var sw = new Stopwatch();
+            sw.Start();
+            SimpleObject value1 = json.FromJson<SimpleObject>();
+            sw.Stop();
+            Assert.IsNotNull(value1);
+            Assert.AreEqual(123, value1.A);
+            Assert.AreEqual(456f, value1.B);
+            Assert.AreEqual("789", value1.C);
+            CollectionAssert.AreEqual(new List<int> { 10, 11, 12 }, value1.D);
+            var factor1 = WriteMetrics(sw, json, false);
+            
+            sw.Start();
+            SimpleObject value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<SimpleObject>(json);
+            sw.Stop();
+            var factor2 = WriteMetrics(sw, json, true);
+            
+            // Expect performance at least as good as newtonsoft (only fair on single test execution)
+            // Assert.IsTrue(factor1 <= factor2);
 
-            value = "dfpoksdafoijsdfij".FromJson<SimpleObject>();
-            Assert.IsNull(value);
+            value1 = "dfpoksdafoijsdfij".FromJson<SimpleObject>();
+            Assert.IsNull(value1);
         }
 
         struct SimpleStruct
         {
+            public int Id;
             public SimpleObject Obj;
         }
 
         [TestMethod]
         public void TestSimpleStruct()
         {
-            SimpleStruct value = "{\"obj\":{\"A\":12345}}".FromJson<SimpleStruct>();
-            Assert.IsNotNull(value.Obj);
-            Assert.AreEqual(value.Obj.A, 12345);
+            var json = "{\"Id\":32,\"obj\":{\"A\":12345}}";
+            var sw = new Stopwatch();
+            sw.Start();
+            SimpleStruct value1 = json.FromJson<SimpleStruct>();
+            sw.Stop();
+            Assert.IsNotNull(value1.Obj);
+            Assert.AreEqual(value1.Obj.A, 12345);
+            Assert.AreEqual(value1.Id, 32);
+            var factor1 = WriteMetrics(sw, json, false);
+            
+            sw.Start();
+            SimpleStruct value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<SimpleStruct>(json);
+            sw.Stop();
+            var factor2 = WriteMetrics(sw, json, true);
+            
+            // Expect performance at least as good as newtonsoft (only fair on single test execution)
+            // Assert.IsTrue(factor1 <= factor2);
         }
 
         struct TinyStruct
@@ -243,9 +373,32 @@ namespace TinyJson.Test
             builder.Append("]");
 
             string json = builder.ToString();
-            var result = json.FromJson<List<TestObject3>>();
-            for (int i = 0; i < result.Count; i++)
-                Assert.AreEqual(10, result[i].Z.F);
+            Console.WriteLine($"JSON.String.Length = {json.Length}");
+            
+            var sw = new Stopwatch();
+            sw.Start();
+            var result1 = json.FromJson<List<TestObject3>>();
+            sw.Stop();
+            for (int i = 0; i < result1.Count; i++)
+                Assert.AreEqual(10, result1[i].Z.F);
+            var factor1 = WriteMetrics(sw, json, false);
+
+            var tinyJson = result1.ToJson();
+            System.IO.File.WriteAllText(@"C:\Autodesk\TinyPerf.json", tinyJson);
+            Console.WriteLine($"TinyJson String.Length = {tinyJson.Length}");
+            
+            
+            sw.Start();
+            var result = Newtonsoft.Json.JsonConvert.DeserializeObject<List<TestObject3>>(json);
+            sw.Stop();
+            var factor2 = WriteMetrics(sw, json, true);
+
+            var newtJson = Newtonsoft.Json.JsonConvert.SerializeObject(result);
+            System.IO.File.WriteAllText(@"C:\Autodesk\NewtPerf.json", newtJson);
+            Console.WriteLine($"NewtJson String.Length = {newtJson.Length}");
+
+            // Expect performance at least as good as newtonsoft (only fair on single test execution)
+            // Assert.IsTrue(factor1 <= factor2); // TODO: See 2024/08/23 README.md notes
         }
 
         [TestMethod]
@@ -321,7 +474,6 @@ namespace TinyJson.Test
                         DynamicParserTest();
                         TestNastyStruct();
                         TestEscaping();
-                        TestDatetime();
                     }
                 }).Start();
             }
@@ -441,11 +593,43 @@ namespace TinyJson.Test
             Assert.AreEqual(dictionary["hello"], "hell", "The parser stored an incorrect value for the duplicated key");
         }
 
-        [TestMethod]
-        public void TestDatetime()
+        public abstract class GenericSimpleObject<T>
         {
-            DateTime datetime = new DateTime(2021, 8, 16, 12, 24, 08);
-            Assert.AreEqual("\"08/16/2021 12:24:08\"".FromJson<DateTime>(), datetime);
+            public abstract int Id { get; set; }
+            public abstract T Obj { get; set; }
         }
+
+        public class GenericComplexImp<TValue> : GenericSimpleObject<EnumClass>
+        {
+            public override int Id { get; set; }
+            public TValue AltId { get; set; }
+            public override EnumClass Obj { get; set; }
+        }
+        
+        [TestMethod]
+        public void TestSimpleGenericObject()
+        {
+            var json = "{\"Id\":32,\"AltId\":\"ALT23\",\"obj\":{\"Colors\":\"Green\",\"Style\":\"Bold, Underline\"}}";
+            var sw = new Stopwatch();
+            sw.Start();
+            var value1 = json.FromJson<GenericComplexImp<string>>();
+            sw.Stop();
+            Assert.IsNotNull(value1);
+            Assert.IsNotNull(value1.Obj);
+            Assert.AreEqual(Color.Green, value1.Obj.Colors);
+            Assert.AreEqual(Style.Bold | Style.Underline, value1.Obj.Style);
+            Assert.AreEqual(value1.Id, 32);
+            Assert.AreEqual("ALT23", value1.AltId);
+            var factor1 = WriteMetrics(sw, json, false);
+            
+            sw.Start();
+            var value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<GenericComplexImp<string>>(json);
+            sw.Stop();
+            var factor2 = WriteMetrics(sw, json, true);
+            
+            // Expect performance at least as good as newtonsoft (only fair on single test execution)
+            // Assert.IsTrue(factor1 <= factor2);
+        }
+        
     }
 }

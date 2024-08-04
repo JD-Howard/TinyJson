@@ -1,0 +1,3 @@
+[*]
+# Original project used LF, doesn't affect anything, and I want to avoid unecessary git diffs
+end_of_line = lf
