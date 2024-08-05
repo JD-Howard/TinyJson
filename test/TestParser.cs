@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using System.Text;
@@ -19,7 +20,7 @@ namespace TinyJson.Test
             // Ensures both of these have initialized so it doesn't skew single test comparisons
             Newtonsoft.Json.JsonConvert.DeserializeObject<int>("1");
             Newtonsoft.Json.JsonConvert.SerializeObject(1);
-            "1".FromJson<int>().ToJson();
+            "1".TinyJsonParse<int>().TinyJsonConvert();
         }
         
         public enum Color
@@ -57,7 +58,7 @@ namespace TinyJson.Test
         {
             var sw = new Stopwatch();
             sw.Start();
-            T value1 = json.FromJson<T>();
+            T value1 = json.TinyJsonParse<T>();
             sw.Stop();
             Assert.AreEqual(expected, value1);
             var factor1 = WriteMetrics(sw, json, false);
@@ -109,7 +110,7 @@ namespace TinyJson.Test
         {
             var sw = new Stopwatch();
             sw.Start();
-            T[] value1 = json.FromJson<T[]>();
+            T[] value1 = json.TinyJsonParse<T[]>();
             sw.Stop();
             CollectionAssert.AreEqual(expected, value1);
             var factor1 = WriteMetrics(sw, json, false);
@@ -143,7 +144,7 @@ namespace TinyJson.Test
         {
             var sw = new Stopwatch();
             sw.Start();
-            var value1 = json.FromJson<List<T>>();
+            var value1 = json.TinyJsonParse<List<T>>();
             sw.Stop();
             CollectionAssert.AreEqual(expected, value1);
             var factor1 = WriteMetrics(sw, json, false);
@@ -177,7 +178,7 @@ namespace TinyJson.Test
         public void TestRecursiveLists()
         {
             var expected = new List<List<int>> { new List<int> { 1, 2 }, new List<int> { 3, 4 } };
-            var actual = "[[1,2],[3,4]]".FromJson<List<List<int>>>();
+            var actual = "[[1,2],[3,4]]".TinyJsonParse<List<List<int>>>();
             Assert.AreEqual(expected.Count, actual.Count);
             for (int i = 0; i < expected.Count; i++)
                 CollectionAssert.AreEqual(expected[i], actual[i]);
@@ -187,7 +188,7 @@ namespace TinyJson.Test
         public void TestRecursiveArrays()
         {
             var expected = new int[][] { new int[] { 1, 2 }, new int[] { 3, 4 } };
-            var actual = "[[1,2],[3,4]]".FromJson<int[][]>();
+            var actual = "[[1,2],[3,4]]".TinyJsonParse<int[][]>();
             Assert.AreEqual(expected.Length, actual.Length);
             for (int i = 0; i < expected.Length; i++)
                 CollectionAssert.AreEqual(expected[i], actual[i]);
@@ -197,7 +198,7 @@ namespace TinyJson.Test
         {
             var sw = new Stopwatch();
             sw.Start();
-            var value1 = json.FromJson<Dictionary<K, V>>();
+            var value1 = json.TinyJsonParse<Dictionary<K, V>>();
             sw.Stop();
             Assert.AreEqual(expected.Count, value1.Count);
             foreach (var pair in expected)
@@ -238,12 +239,22 @@ namespace TinyJson.Test
 
             DictTest(new Dictionary<string, float> { { "foo", 5f }, { "bar", 10f }, { "baz", 128f } }, "{\"foo\":5,\"bar\":10,\"baz\":128}");
             DictTest(new Dictionary<string, string> { { "foo", "\"" }, { "bar", "hello" }, { "baz", "," } }, "{\"foo\":\"\\\"\",\"bar\":\"hello\",\"baz\":\",\"}");
+            
+            DictTest(new Dictionary<int, float> { { 1, 5f }, { 2, 10f }, { 3, 128f } }, "{\"1\":5,\"2\":10,\"3\":128}");
+            DictTest(new Dictionary<ushort, float> { { 1, 5f }, { 2, 10f }, { 3, 128f } }, "{\"1\":5,\"2\":10,\"3\":128}");
+            
+            DictTest(new Dictionary<decimal, float> { { 1.0m, 5f }, { 2.2m, 10f }, { 3.3m, 128f } }, "{\"1.0\":5,\"2.2\":10,\"3.3\":128}");
+            DictTest(new Dictionary<decimal, float> { { 1.0m, 5f }, { 2.2m, 10f }, { 3.3m, 128f } }, "{1.0:5,2.2:10,3.3:128}", true);
+            
+            DictTest(new Dictionary<Color, float> { { Color.Red, 5f }, { Color.Green, 10f }, { Color.Blue, 128f } }, "{\"0\":5,\"1\":10,\"2\":128}");
+            
+            DictTest(new Dictionary<TimeSpan, float> { { TimeSpan.Zero, 5f }, { TimeSpan.Parse("01:02:03"), 10f } }, "{\"00:00:00\":5,\"01:02:03\":10}");
         }
 
         [TestMethod]
         public void TestRecursiveDictionary()
         {
-            var result = "{\"foo\":{ \"bar\":\"\\\"{,,:[]}\" }}".FromJson<Dictionary<string, Dictionary<string, string>>>();
+            var result = "{\"foo\":{ \"bar\":\"\\\"{,,:[]}\" }}".TinyJsonParse<Dictionary<string, Dictionary<string, string>>>();
             Assert.AreEqual("\"{,,:[]}", result["foo"]["bar"]);
         }
 
@@ -261,7 +272,7 @@ namespace TinyJson.Test
             var json = "{\"A\":123,\"b\":456,\"C\":\"789\",\"D\":[10,11,12]}";
             var sw = new Stopwatch();
             sw.Start();
-            SimpleObject value1 = json.FromJson<SimpleObject>();
+            SimpleObject value1 = json.TinyJsonParse<SimpleObject>();
             sw.Stop();
             Assert.IsNotNull(value1);
             Assert.AreEqual(123, value1.A);
@@ -278,7 +289,7 @@ namespace TinyJson.Test
             // Expect performance at least as good as newtonsoft (only fair on single test execution)
             // Assert.IsTrue(factor1 <= factor2);
 
-            value1 = "dfpoksdafoijsdfij".FromJson<SimpleObject>();
+            value1 = "dfpoksdafoijsdfij".TinyJsonParse<SimpleObject>();
             Assert.IsNull(value1);
         }
 
@@ -294,7 +305,7 @@ namespace TinyJson.Test
             var json = "{\"Id\":32,\"obj\":{\"A\":12345}}";
             var sw = new Stopwatch();
             sw.Start();
-            SimpleStruct value1 = json.FromJson<SimpleStruct>();
+            SimpleStruct value1 = json.TinyJsonParse<SimpleStruct>();
             sw.Stop();
             Assert.IsNotNull(value1.Obj);
             Assert.AreEqual(value1.Obj.A, 12345);
@@ -318,7 +329,7 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestListOfStructs()
         {
-            var values = "[{\"Value\":1},{\"Value\":2},{\"Value\":3}]".FromJson<List<TinyStruct>>();
+            var values = "[{\"Value\":1},{\"Value\":2},{\"Value\":3}]".TinyJsonParse<List<TinyStruct>>();
             for (int i = 0; i < values.Count; i++)
                 Assert.AreEqual(i + 1, values[i].Value);
         }
@@ -333,20 +344,20 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestDeepObject()
         {
-            var value = "{\"A\":{\"A\":{\"A\":{}}}}".FromJson<TestObject2>();
+            var value = "{\"A\":{\"A\":{\"A\":{}}}}".TinyJsonParse<TestObject2>();
             Assert.IsNotNull(value);
             Assert.IsNotNull(value.A);
             Assert.IsNotNull(value.A.A);
             Assert.IsNotNull(value.A.A.A);
 
-            value = "{\"B\":[{},null,{\"A\":{}}]}".FromJson<TestObject2>();
+            value = "{\"B\":[{},null,{\"A\":{}}]}".TinyJsonParse<TestObject2>();
             Assert.IsNotNull(value);
             Assert.IsNotNull(value.B);
             Assert.IsNotNull(value.B[0]);
             Assert.IsNull(value.B[1]);
             Assert.IsNotNull(value.B[2].A);
 
-            value = "{\"C\":{\"Obj\":{\"A\":5}}}".FromJson<TestObject2>();
+            value = "{\"C\":{\"Obj\":{\"A\":5}}}".TinyJsonParse<TestObject2>();
             Assert.IsNotNull(value);
             Assert.IsNotNull(value.C.Obj);
             Assert.AreEqual(5, value.C.Obj.A);
@@ -358,8 +369,7 @@ namespace TinyJson.Test
             public TestObject3 Z { get; set; }
         }
 
-        [TestMethod]
-        public void PerformanceTest()
+        private static string GetPerformanceTestJson()
         {
             StringBuilder builder = new StringBuilder();
             builder.Append("[");
@@ -371,20 +381,37 @@ namespace TinyJson.Test
                     builder.Append(",");
             }
             builder.Append("]");
-
-            string json = builder.ToString();
+            return builder.ToString();
+        }
+        
+        [TestMethod]
+        public void PerformanceTest()
+        {
+            // Its not good form, but this test is actually verifying quite a several aspects of the overall system.
+            
+            var json = GetPerformanceTestJson();
             Console.WriteLine($"JSON.String.Length = {json.Length}");
             
             var sw = new Stopwatch();
             sw.Start();
-            var result1 = json.FromJson<List<TestObject3>>();
+            var result1 = json.TinyJsonParse<List<TestObject3>>();
             sw.Stop();
             for (int i = 0; i < result1.Count; i++)
                 Assert.AreEqual(10, result1[i].Z.F);
             var factor1 = WriteMetrics(sw, json, false);
 
-            var tinyJson = result1.ToJson();
-            System.IO.File.WriteAllText(@"C:\Autodesk\TinyPerf.json", tinyJson);
+            var tinyJson = result1.TinyJsonTabConvert(false);
+            var filePath = new FileInfo("TinyPerfIndented.json").FullName;
+            result1.TinyJsonTabConvert(filePath, false);
+            Assert.AreEqual(tinyJson.Length, File.ReadAllText(filePath).Length);
+            
+            var indentedResult = tinyJson.TinyJsonParse<List<TestObject3>>();
+            Assert.IsNotNull(indentedResult); // trivial verification that the indented version is still valid json
+            
+            tinyJson = result1.TinyJsonConvert();
+            filePath = new FileInfo("TinyPerf.json").FullName;
+            result1.TinyJsonConvert(filePath);
+            Assert.AreEqual(tinyJson.Length, File.ReadAllText(filePath).Length);
             Console.WriteLine($"TinyJson String.Length = {tinyJson.Length}");
             
             
@@ -393,32 +420,40 @@ namespace TinyJson.Test
             sw.Stop();
             var factor2 = WriteMetrics(sw, json, true);
 
-            var newtJson = Newtonsoft.Json.JsonConvert.SerializeObject(result);
-            System.IO.File.WriteAllText(@"C:\Autodesk\NewtPerf.json", newtJson);
+            var newtJson = Newtonsoft.Json.JsonConvert.SerializeObject(result, Newtonsoft.Json.Formatting.Indented);
+            filePath = new FileInfo("NewtPerfIndented.json").FullName;
+            File.WriteAllText(filePath, newtJson);
+            
+            newtJson = Newtonsoft.Json.JsonConvert.SerializeObject(result);
+            filePath = new FileInfo("NewtPerf.json").FullName;
+            File.WriteAllText(filePath, newtJson);
             Console.WriteLine($"NewtJson String.Length = {newtJson.Length}");
 
             // Expect performance at least as good as newtonsoft (only fair on single test execution)
-            // Assert.IsTrue(factor1 <= factor2); // TODO: See 2024/08/23 README.md notes
+            // Assert.IsTrue(factor1 <= factor2); // TODO: See 2024/08/24 README.md notes on JSONParser
         }
+
+        
+        
 
         [TestMethod]
         public void CorruptionTest()
         {
-            "{{{{{{[[[]]][[,,,,]],],],]]][[nulldsfoijsfd[[]]]]]]]]]}}}}}{{{{{{{{{D{FD{FD{F{{{{{}}}XXJJJI%&:,,,,,".FromJson<object>();
-            "[[,[,,[,:::[[[[[[[".FromJson<List<List<int>>>();
-            "{::,[][][],::::,}".FromJson<Dictionary<string, object>>();
+            "{{{{{{[[[]]][[,,,,]],],],]]][[nulldsfoijsfd[[]]]]]]]]]}}}}}{{{{{{{{{D{FD{FD{F{{{{{}}}XXJJJI%&:,,,,,".TinyJsonParse<object>();
+            "[[,[,,[,:::[[[[[[[".TinyJsonParse<List<List<int>>>();
+            "{::,[][][],::::,}".TinyJsonParse<Dictionary<string, object>>();
         }
 
         [TestMethod]
         public void DynamicParserTest()
         {
-            List<object> list = (List<object>)("[0,1,2,3]".FromJson<object>());
+            List<object> list = (List<object>)("[0,1,2,3]".TinyJsonParse<object>());
             Assert.IsTrue(list.Count == 4 && (int)list[3] == 3);
-            Dictionary<string, object> obj = (Dictionary<string, object>)("{\"Foo\":\"Bar\"}".FromJson<object>());
+            Dictionary<string, object> obj = (Dictionary<string, object>)("{\"Foo\":\"Bar\"}".TinyJsonParse<object>());
             Assert.IsTrue((string)obj["Foo"] == "Bar");
 
             string testJson = "{\"A\":123,\"B\":456,\"C\":\"789\",\"D\":[10,11,12]}";
-            Assert.AreEqual(testJson, ((Dictionary<string, object>)testJson.FromJson<object>()).ToJson());
+            Assert.AreEqual(testJson, ((Dictionary<string, object>)testJson.TinyJsonParse<object>()).TinyJsonConvert());
         }
 
         public struct NastyStruct
@@ -434,7 +469,7 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestNastyStruct()
         {
-            NastyStruct s = "{\"R\":234,\"G\":123,\"B\":11}".FromJson<NastyStruct>();
+            NastyStruct s = "{\"R\":234,\"G\":123,\"B\":11}".TinyJsonParse<NastyStruct>();
             Assert.AreEqual(234, s.R);
             Assert.AreEqual(123, s.G);
             Assert.AreEqual(11, s.B);
@@ -444,7 +479,7 @@ namespace TinyJson.Test
         public void TestEscaping()
         {
             var orig = new Dictionary<string, string> { { "hello", "world\n \" \\ \b \r \\0\u263A" } };
-            var parsed = "{\"hello\":\"world\\n \\\" \\\\ \\b \\r \\0\\u263a\"}".FromJson<Dictionary<string, string>>();
+            var parsed = "{\"hello\":\"world\\n \\\" \\\\ \\b \\r \\0\\u263a\"}".TinyJsonParse<Dictionary<string, string>>();
             Assert.AreEqual(orig["hello"], parsed["hello"]);
         }
 
@@ -493,7 +528,7 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestIgnoreDataMember()
         {
-            IgnoreDataMemberObject value = "{\"A\":123,\"B\":456,\"Ignored\":10,\"C\":789,\"D\":14}".FromJson<IgnoreDataMemberObject>();
+            IgnoreDataMemberObject value = "{\"A\":123,\"B\":456,\"Ignored\":10,\"C\":789,\"D\":14}".TinyJsonParse<IgnoreDataMemberObject>();
             Assert.IsNotNull(value);
             Assert.AreEqual(123, value.A);
             Assert.AreEqual(0, value.B);
@@ -516,7 +551,7 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestDataMemberObject()
         {
-            DataMemberObject value = "{\"a\":123,\"B\":456,\"c\":789,\"D\":14}".FromJson<DataMemberObject>();
+            DataMemberObject value = "{\"a\":123,\"B\":456,\"c\":789,\"D\":14}".TinyJsonParse<DataMemberObject>();
             Assert.IsNotNull(value);
             Assert.AreEqual(123, value.A);
             Assert.AreEqual(456, value.B);
@@ -533,22 +568,22 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestEnumMember()
         {
-            EnumClass value = "{\"Colors\":\"Green\",\"Style\":\"Bold, Underline\"}".FromJson<EnumClass>();
+            EnumClass value = "{\"Colors\":\"Green\",\"Style\":\"Bold, Underline\"}".TinyJsonParse<EnumClass>();
             Assert.IsNotNull(value);
             Assert.AreEqual(Color.Green, value.Colors);
             Assert.AreEqual(Style.Bold | Style.Underline, value.Style);
 
-            value = "{\"Colors\":3,\"Style\":10}".FromJson<EnumClass>();
+            value = "{\"Colors\":3,\"Style\":10}".TinyJsonParse<EnumClass>();
             Assert.IsNotNull(value);
             Assert.AreEqual(Color.Yellow, value.Colors);
             Assert.AreEqual(Style.Italic | Style.Strikethrough, value.Style);
 
-            value = "{\"Colors\":\"3\",\"Style\":\"10\"}".FromJson<EnumClass>();
+            value = "{\"Colors\":\"3\",\"Style\":\"10\"}".TinyJsonParse<EnumClass>();
             Assert.IsNotNull(value);
             Assert.AreEqual(Color.Yellow, value.Colors);
             Assert.AreEqual(Style.Italic | Style.Strikethrough, value.Style);
 
-            value = "{\"Colors\":\"sfdoijsdfoij\",\"Style\":\"sfdoijsdfoij\"}".FromJson<EnumClass>();
+            value = "{\"Colors\":\"sfdoijsdfoij\",\"Style\":\"sfdoijsdfoij\"}".TinyJsonParse<EnumClass>();
             Assert.IsNotNull(value);
             Assert.AreEqual(Color.Red, value.Colors);
             Assert.AreEqual(Style.None, value.Style);
@@ -557,7 +592,7 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestDuplicateKeys()
         {
-            var parsed = @"{""hello"": ""world"", ""goodbye"": ""heaven"", ""hello"": ""hell""}".FromJson<Dictionary<string, object>>();
+            var parsed = @"{""hello"": ""world"", ""goodbye"": ""heaven"", ""hello"": ""hell""}".TinyJsonParse<Dictionary<string, object>>();
             /*
              * We expect the parser to process the (valid) JSON above containing a duplicated key. The dictionary ensures that there is
              * only one entry with the duplicate key.
@@ -576,7 +611,7 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestDuplicateKeysInAnonymousObject()
         {
-            var parsed = @"{""hello"": ""world"", ""goodbye"": ""heaven"", ""hello"": ""hell""}".FromJson<object>();
+            var parsed = @"{""hello"": ""world"", ""goodbye"": ""heaven"", ""hello"": ""hell""}".TinyJsonParse<object>();
             var dictionary = (Dictionary<string, object>)parsed;
             /*
              * We expect the parser to process the (valid) JSON above containing a duplicated key. The dictionary ensures that there is
@@ -609,10 +644,10 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestSimpleGenericObject()
         {
-            var json = "{\"Id\":32,\"AltId\":\"ALT23\",\"obj\":{\"Colors\":\"Green\",\"Style\":\"Bold, Underline\"}}";
+            var json = "{\"Id\":32,\"AltId\":\"ALT23\",\"Obj\":{\"Colors\":\"Green\",\"Style\":\"Bold, Underline\"}}";
             var sw = new Stopwatch();
             sw.Start();
-            var value1 = json.FromJson<GenericComplexImp<string>>();
+            var value1 = json.TinyJsonParse<GenericComplexImp<string>>();
             sw.Stop();
             Assert.IsNotNull(value1);
             Assert.IsNotNull(value1.Obj);
@@ -621,6 +656,10 @@ namespace TinyJson.Test
             Assert.AreEqual(value1.Id, 32);
             Assert.AreEqual("ALT23", value1.AltId);
             var factor1 = WriteMetrics(sw, json, false);
+
+            // TODO reorganize test model stubs so its easier to put this with the correct test group 
+            var back = value1.TinyJsonConvert();
+            Assert.AreEqual(json, back);
             
             sw.Start();
             var value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<GenericComplexImp<string>>(json);

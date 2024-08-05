@@ -1,0 +1,26 @@
+name: TinyJson Simple Release Updater
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.x      
+      - run: |
+          dotnet build "${{ github.workspace }}\src\json.csproj" --no-restore --configuration "Release"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git config --global user.name ${{ github.actor }}
+          git add ./Release/*.cs
+          git add ./Release/*.dll
+          git commit -m 'GH Action Release Artifacts'
+          git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

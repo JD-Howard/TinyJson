@@ -1,16 +1,15 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Globalization;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.Serialization;
-using System.Text;
-
-namespace TinyJson
+﻿namespace TinyJson
 {
+    using System;
+    using System.Collections;
+    using System.Collections.Generic;
+    using System.ComponentModel;
+    using System.Globalization;
+    using System.Linq;
+    using System.Reflection;
+    using System.Runtime.Serialization;
+    using System.Text;
+    
     // Really simple JSON parser in ~300 lines
     // - Attempts to parse JSON files with minimal GC allocation
     // - Nice and simple "[1,2,3]".FromJson<List<int>>() API
@@ -28,14 +27,17 @@ namespace TinyJson
     // - No JIT Emit support to parse structures quickly
     // - Limited to parsing <2GB JSON files (due to int.MaxValue)
     // - Parsing of abstract classes or interfaces is NOT supported and will throw an exception.
-    public static class JSONParser
+    public static partial class Serialization
     {
         [ThreadStatic] static Stack<List<string>> splitArrayPool;
         [ThreadStatic] static StringBuilder stringBuilder;
         [ThreadStatic] static Dictionary<Type, Dictionary<string, FieldInfo>> fieldInfoCache;
         [ThreadStatic] static Dictionary<Type, Dictionary<string, PropertyInfo>> propertyInfoCache;
 
-        public static T FromJson<T>(this string json, bool ignoreEnumCase = true)
+        // All of these have handlers that will convert to/from a simple string representation
+        private static readonly Type[] SpecialKeys = new[] {typeof(Guid), typeof(DateTime), typeof(DateTimeOffset), typeof(TimeSpan)};
+
+        public static T FromJson<T>(string json, bool ignoreEnumCase)
         {
             // Initialize, if needed, the ThreadStatic variables
             propertyInfoCache ??= new Dictionary<Type, Dictionary<string, PropertyInfo>>();
@@ -142,7 +144,7 @@ namespace TinyJson
                 goto ClassHandlers;
             
             var nestedType = Nullable.GetUnderlyingType(type);
-            var isNullable = nestedType is not null;
+            var isNullable = nestedType != null;
             if (isNullable)
                 type = nestedType;
             
@@ -213,6 +215,10 @@ namespace TinyJson
                 return null;
 
             var isStringKey = keyType == typeof(string);
+            var isDecimalKey = keyType == typeof(decimal);
+            if (!isStringKey && !keyType.IsPrimitive && !keyType.IsEnum && !isDecimalKey && !SpecialKeys.Contains(keyType))
+                return null;
+            
             var dictionary = (IDictionary)type.GetConstructor(new Type[] { typeof(int) }).Invoke(new object[] { elems.Count / 2 });
             for (int i = 0; i < elems.Count; i += 2)
             {
@@ -226,8 +232,7 @@ namespace TinyJson
                     ? elems[i].Substring(1, elems[i].Length - 2)
                     : elems[i];
                     
-                object keyValue = isStringKey ? rawKey
-                    : ParseValue(keyType, rawKey, ignoreEnumCase);
+                object keyValue = isStringKey ? rawKey : ParseValue(keyType, rawKey, ignoreEnumCase);
                 object val = ParseValue(valueType, elems[i + 1], ignoreEnumCase);
                 dictionary[keyValue] = val;
             }
@@ -271,10 +276,10 @@ namespace TinyJson
                 return ParseDateTypes<DateTimeOffset>(DateTimeOffset.TryParse, json.Replace("\"", ""), isNullable, DateTimeStyles.RoundtripKind);
             
             if (type == typeof(TimeSpan))
-                return TimeSpan.TryParse(json.Replace("\"", ""), CultureInfo.InvariantCulture, out var result) ? result : isNullable ? null : TimeSpan.Zero;
+                return TimeSpan.TryParse(json.Replace("\"", ""), CultureInfo.InvariantCulture, out var result) ? result : isNullable ? (TimeSpan?)null : TimeSpan.Zero;
             
             if (type == typeof(Guid))
-                return Guid.TryParse(json.Replace("\"", ""), out var result) ? result : isNullable ? null : Guid.Empty;
+                return Guid.TryParse(json.Replace("\"", ""), out var result) ? result : isNullable ? (Guid?)null : Guid.Empty;
                 
             // Fallback is to treat uncommon structs as objects
             return ParseObject(type, json, ignoreEnumCase);
@@ -286,19 +291,18 @@ namespace TinyJson
                 json = json.Substring(1, json.Length - 2);
             try
             {
-                // Note that this will handle a name or value
-                return Enum.Parse(type, json, ignoreEnumCase);
+                return Enum.Parse(type, json, ignoreEnumCase); // This will handle a name or value
             }
             catch
             {
-                return Enum.GetValues(type).Cast<int>().Min();
+                return Activator.CreateInstance(type); // creates the default value for Enum
             }
         }
 
         private static object ParsePrimitiveValue(Type type, string json, bool isNullable)
         {
             if (type == typeof(bool))
-                return bool.TryParse(json, out var result) ? result : isNullable ? null : false;
+                return bool.TryParse(json, out var result) ? result : isNullable ? (bool?)null : false;
             
             if (type == typeof(byte))
                 return ParseNumberTypes<byte>(byte.TryParse, json, isNullable, NumberStyles.Integer);
@@ -331,7 +335,7 @@ namespace TinyJson
                 return ParseNumberTypes<double>(double.TryParse, json, isNullable, NumberStyles.Float);
             
             if (type == typeof(char))
-                return json.Length == 1 ? json[0] : isNullable ? null : default(char);
+                return json.Length == 1 ? json[0] : isNullable ? (char?)null : default(char);
             
             return null;
         }
@@ -343,7 +347,10 @@ namespace TinyJson
             if (parser(json, style, CultureInfo.InvariantCulture, out var result))
                 return result;
 
-            return isNullable ? null : default(T);
+            if (isNullable)
+                return null;
+            
+            return default(T);
         }
         
         private delegate bool DateStyleParseDelegate<T>(string s, IFormatProvider provider, DateTimeStyles styles, out T result) where T : struct;
@@ -353,7 +360,10 @@ namespace TinyJson
             if (parser(json, CultureInfo.InvariantCulture, style, out var result))
                 return result;
 
-            return isNullable ? null : default(T);
+            if (isNullable)
+                return null;
+            
+            return default(T);
         }
         
 

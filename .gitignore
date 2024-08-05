@@ -1,8 +1,10 @@
-# Project Folders
+# Project Folder Excludes
 /**/TestResults/**/*
 /**/packages/**/*
 /**/obj/**/*
 /**/bin/**/*
+/**/debug/**/*
+/**/release/**/*
 
 # macOS
 .DS_Store
