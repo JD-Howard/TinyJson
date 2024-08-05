@@ -18,8 +18,8 @@ jobs:
           dotnet build "${{ github.workspace }}\json.sln" --configuration "Release"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
           git config --global user.name ${{ github.actor }}
-          git add "${{ github.workspace }}\Release\TinyJson.cs"
-          git add "${{ github.workspace }}\Release\TinyJson.dll"
+          git add -f "${{ github.workspace }}\Release\TinyJson.cs"
+          git add -f "${{ github.workspace }}\Release\TinyJson.dll"
           git commit -m 'GH Action Release Artifacts'
           git push origin main
         env:
