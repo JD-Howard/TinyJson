@@ -29,7 +29,7 @@
         /// Extension method for converting an object to a JSON string with tab indentation using the TinyJson library.
         /// </summary>
         /// <inheritdoc cref="TinyJsonConvert(object, bool)"/>
-        public static string TinyJsonTabConvert(this object item, bool includeNulls = true)
+        public static string TinyJsonTabConvert(this object item, bool includeNulls = false)
             => TinyJson.Serialization.ToJson(item, includeNulls, true);
 
         /// <summary>

@@ -1,4 +1,6 @@
-﻿namespace TinyJson
+﻿using System.Text.RegularExpressions;
+
+namespace TinyJson
 {
     using System;
     using System.Collections;
@@ -132,7 +134,10 @@
                     strBuilder.Append(',');
                 
                 if (isStringKey)
-                    strBuilder.Append($"\"{key}\":");
+                {
+                    AppendStringValue(strBuilder, key.ToString());
+                    strBuilder.Append(':');
+                }
                 else
                 { 
                     if (isWrapped)

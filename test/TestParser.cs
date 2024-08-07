@@ -1,14 +1,16 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Runtime.Serialization;
 using System.Text;
 using System.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using TinyJson;
+using TinyJson.Test.Constants;
+using TinyJson.Test.Models;
 
 namespace TinyJson.Test
 {
@@ -20,25 +22,7 @@ namespace TinyJson.Test
             // Ensures both of these have initialized so it doesn't skew single test comparisons
             Newtonsoft.Json.JsonConvert.DeserializeObject<int>("1");
             Newtonsoft.Json.JsonConvert.SerializeObject(1);
-            "1".TinyJsonParse<int>().TinyJsonConvert();
-        }
-        
-        public enum Color
-        {
-            Red,
-            Green,
-            Blue,
-            Yellow
-        }
-
-        [Flags]
-        public enum Style
-        {
-            None = 0,
-            Bold = 1,
-            Italic = 2,
-            Underline = 4,
-            Strikethrough = 8
+            "[1]".TinyJsonParse<List<int>>().TinyJsonConvert();
         }
 
         private static long WriteMetrics(Stopwatch sw, string json, bool isNewton)
@@ -92,86 +76,54 @@ namespace TinyJson.Test
             Test(true, "true");
             Test(false, "false");
             Test<object>(null, "sfdoijsdfoij", true);
-            Test(Color.Green, "\"Green\"");
-            Test(Color.Blue, "2");
-            Test(Color.Blue, "\"2\"");
+            Test(Hue.Green, "\"Green\"");
+            Test(Hue.Blue, "2");
+            Test(Hue.Blue, "\"2\"");
             
             // Fallback scenario is by far the worst performance of the group
             // I enhanced this by not purely expecting zero to be an available fallback,
             // but my addition is only causing about 2ms of this +40m performance hit.
-            Test(Color.Red, "\"sfdoijsdfoij\"", true); 
+            Test(Hue.Red, "\"sfdoijsdfoij\"", true); 
             Test(Style.Bold | Style.Italic, "\"Bold, Italic\"");
             Test(Style.Bold | Style.Italic, "3");
             Test("\u94b1\u4e0d\u591f!", "\"\u94b1\u4e0d\u591f!\"");
             Test("\u94b1\u4e0d\u591f!", "\"\\u94b1\\u4e0d\\u591f!\"");
         }
 
-        private static void ArrayTest<T>(T[] expected, string json, bool skipNewton = false)
+        static void CollectionTest<T>(T expected, string json) where T : ICollection
         {
             var sw = new Stopwatch();
             sw.Start();
-            T[] value1 = json.TinyJsonParse<T[]>();
+            var value1 = json.TinyJsonParse<T>();
             sw.Stop();
             CollectionAssert.AreEqual(expected, value1);
-            var factor1 = WriteMetrics(sw, json, false);
-            
-            if (skipNewton)
-                return;
-            
-            sw.Start();
-            T[] value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<T[]>(json);
-            sw.Stop();
-            CollectionAssert.AreEqual(value2, value1);
-            var factor2 = WriteMetrics(sw, json, true);
-            
-            // Expect performance at least as good as newtonsoft (only fair on single test execution)
-            // Assert.IsTrue(factor1 <= factor2);
         }
 
         [TestMethod]
         public void TestArrayOfValues()
         {
-            ArrayTest(new string[] { "one", "two", "three" }, "[\"one\",\"two\",\"three\"]");
-            ArrayTest(new int[] { 1, 2, 3 }, "[1,2,3]");
-            ArrayTest(new bool[] { true, false, true }, "     [true    ,    false,true     ]   ");
-            ArrayTest(new object[] { null, null }, "[null,null]");
-            ArrayTest(new float[] { 0.24f, 1.2f }, "[0.24,1.2]");
-            ArrayTest(new double[] { 0.15, 0.19 }, "[0.15, 0.19]");
-            ArrayTest<object>(null, "[garbled", true);
-        }
-
-        static void ListTest<T>(List<T> expected, string json, bool skipNewton = false)
-        {
-            var sw = new Stopwatch();
-            sw.Start();
-            var value1 = json.TinyJsonParse<List<T>>();
-            sw.Stop();
-            CollectionAssert.AreEqual(expected, value1);
-            var factor1 = WriteMetrics(sw, json, false);
-            
-            if (skipNewton)
-                return;
-            
-            sw.Start();
-            var value2 = Newtonsoft.Json.JsonConvert.DeserializeObject<List<T>>(json);
-            sw.Stop();
-            CollectionAssert.AreEqual(value2, value1);
-            var factor2 = WriteMetrics(sw, json, true);
-            
-            // Expect performance at least as good as newtonsoft (only fair on single test execution)
-            // Assert.IsTrue(factor1 <= factor2);
+            CollectionTest(new string[] { "one", "two", "three" }, "[\"one\",\"two\",\"three\"]");
+            CollectionTest(new int[] { 1, 2, 3 }, "[1,2,3]");
+            CollectionTest(new bool[] { true, false, true }, "     [true    ,    false,true     ]   ");
+            CollectionTest(new object[] { null, null }, "[null,null]");
+            CollectionTest(new float[] { 0.24f, 1.2f }, "[0.24,1.2]");
+            CollectionTest(new double[] { 0.15, 0.19 }, "[0.15, 0.19]");
+            Assert.AreEqual(null, "[garbled".TinyJsonParse<object>());
         }
 
         [TestMethod]
         public void TestListOfValues()
         {
-            ListTest(new List<string> { "one", "two", "three" }, "[\"one\",\"two\",\"three\"]");
-            ListTest(new List<int> { 1, 2, 3 }, "[1,2,3]");
-            ListTest(new List<bool> { true, false, true }, "     [true    ,    false,true     ]   ");
-            ListTest(new List<object> { null, null }, "[null,null]");
-            ListTest(new List<float> { 0.24f, 1.2f }, "[0.24,1.2]");
-            ListTest(new List<double> { 0.15, 0.19 }, "[0.15, 0.19]");
-            ListTest<object>(null, "[garbled", true);
+            CollectionTest(new List<string> { "one", "two", "three" }, "[\"one\",\"two\",\"three\"]");
+            CollectionTest(new List<int> { 1, 2, 3 }, "[1,2,3]");
+            CollectionTest(new List<bool> { true, false, true }, "     [true    ,    false,true     ]   ");
+            CollectionTest(new List<object> { null, null }, "[null,null]");
+            CollectionTest(new List<float> { 0.24f, 1.2f }, "[0.24,1.2]");
+            CollectionTest(new List<double> { 0.15, 0.19 }, "[0.15, 0.19]");
+            Assert.AreEqual(null, "[garbled".TinyJsonParse<object>());
+            Assert.AreEqual(0, "[]".TinyJsonParse<List<int>>().Count); // Validates issue 11 is still fixed.
+            Assert.AreEqual(0, "[]".TinyJsonParse<List<int?>>().Count); // Validates issue 11 is still fixed.
+            Assert.AreEqual(2, "[1,null]".TinyJsonParse<List<int?>>().Count);
         }
 
         [TestMethod]
@@ -227,7 +179,7 @@ namespace TinyJson.Test
         }
 
         [TestMethod]
-        public void TestDictionary()
+        public void TestDictionary() // Issue #13 was ignored by original project, but I greatly expanded supported dictionary keys
         {
             DictTest(new Dictionary<string, int> { { "foo", 5 }, { "bar", 10 }, { "baz", 128 } }, "{\"foo\":5,\"bar\":10,\"baz\":128}");
             
@@ -246,7 +198,7 @@ namespace TinyJson.Test
             DictTest(new Dictionary<decimal, float> { { 1.0m, 5f }, { 2.2m, 10f }, { 3.3m, 128f } }, "{\"1.0\":5,\"2.2\":10,\"3.3\":128}");
             DictTest(new Dictionary<decimal, float> { { 1.0m, 5f }, { 2.2m, 10f }, { 3.3m, 128f } }, "{1.0:5,2.2:10,3.3:128}", true);
             
-            DictTest(new Dictionary<Color, float> { { Color.Red, 5f }, { Color.Green, 10f }, { Color.Blue, 128f } }, "{\"0\":5,\"1\":10,\"2\":128}");
+            DictTest(new Dictionary<Hue, float> { { Hue.Red, 5f }, { Hue.Green, 10f }, { Hue.Blue, 128f } }, "{\"0\":5,\"1\":10,\"2\":128}");
             
             DictTest(new Dictionary<TimeSpan, float> { { TimeSpan.Zero, 5f }, { TimeSpan.Parse("01:02:03"), 10f } }, "{\"00:00:00\":5,\"01:02:03\":10}");
         }
@@ -256,14 +208,6 @@ namespace TinyJson.Test
         {
             var result = "{\"foo\":{ \"bar\":\"\\\"{,,:[]}\" }}".TinyJsonParse<Dictionary<string, Dictionary<string, string>>>();
             Assert.AreEqual("\"{,,:[]}", result["foo"]["bar"]);
-        }
-
-        class SimpleObject
-        {
-            public int A;
-            public float B;
-            public string C { get; set; }
-            public List<int> D { get; set; }
         }
 
         [TestMethod]
@@ -293,12 +237,6 @@ namespace TinyJson.Test
             Assert.IsNull(value1);
         }
 
-        struct SimpleStruct
-        {
-            public int Id;
-            public SimpleObject Obj;
-        }
-
         [TestMethod]
         public void TestSimpleStruct()
         {
@@ -321,24 +259,12 @@ namespace TinyJson.Test
             // Assert.IsTrue(factor1 <= factor2);
         }
 
-        struct TinyStruct
-        {
-            public int Value;
-        }
-
         [TestMethod]
         public void TestListOfStructs()
         {
             var values = "[{\"Value\":1},{\"Value\":2},{\"Value\":3}]".TinyJsonParse<List<TinyStruct>>();
             for (int i = 0; i < values.Count; i++)
                 Assert.AreEqual(i + 1, values[i].Value);
-        }
-
-        class TestObject2
-        {
-            public TestObject2 A;
-            public List<TestObject2> B;
-            public SimpleStruct C;
         }
 
         [TestMethod]
@@ -361,12 +287,6 @@ namespace TinyJson.Test
             Assert.IsNotNull(value);
             Assert.IsNotNull(value.C.Obj);
             Assert.AreEqual(5, value.C.Obj.A);
-        }
-
-        class TestObject3
-        {
-            public int A, B, C, D, E, F;
-            public TestObject3 Z { get; set; }
         }
 
         private static string GetPerformanceTestJson()
@@ -454,16 +374,11 @@ namespace TinyJson.Test
 
             string testJson = "{\"A\":123,\"B\":456,\"C\":\"789\",\"D\":[10,11,12]}";
             Assert.AreEqual(testJson, ((Dictionary<string, object>)testJson.TinyJsonParse<object>()).TinyJsonConvert());
-        }
-
-        public struct NastyStruct
-        {
-            public byte R, G, B;
-            public NastyStruct(byte r, byte g, byte b)
-            {
-                R = r; G = g; B = b;
-            }
-            public static NastyStruct Nasty = new NastyStruct(0, 0, 0);
+            
+            // Issue #32 Validation
+            list = (List<object>)$"[{int.MaxValue},{uint.MaxValue}]".TinyJsonParse<object>();
+            Assert.AreEqual(int.MaxValue, (int)list[0]);
+            Assert.AreEqual(uint.MaxValue, (long)list[1]);
         }
 
         [TestMethod]
@@ -478,9 +393,18 @@ namespace TinyJson.Test
         [TestMethod]
         public void TestEscaping()
         {
-            var orig = new Dictionary<string, string> { { "hello", "world\n \" \\ \b \r \\0\u263A" } };
+            var expect = "world\n \" \\ \b \r \\0\u263A";
+            var orig = new Dictionary<string, string> { { "hello", expect } };
             var parsed = "{\"hello\":\"world\\n \\\" \\\\ \\b \\r \\0\\u263a\"}".TinyJsonParse<Dictionary<string, string>>();
             Assert.AreEqual(orig["hello"], parsed["hello"]);
+            Assert.AreEqual(expect, parsed["hello"]);
+            
+            // Part of validating the new 1-pass whitespace ignore (vs pre-scanning) is working.
+            Assert.AreEqual(expect, Serialization.FromJson<string>($"   \"{expect}\"   ", false));
+            Assert.AreEqual(expect, Serialization.FromJson<object>($"   \"{expect}\"   ", false));
+            
+            // Without the double quotes, it shouldn't know what to do with this
+            Assert.AreNotEqual(expect, Serialization.FromJson<string>($"   {expect}   ", false));
         }
 
         [TestMethod]
@@ -514,17 +438,6 @@ namespace TinyJson.Test
             }
         }
 
-        class IgnoreDataMemberObject
-        {
-            public int A;
-            [IgnoreDataMember]
-            public int B;
-
-            public int C { get; set; }
-            [IgnoreDataMember]
-            public int D { get; set; }
-        }
-
         [TestMethod]
         public void TestIgnoreDataMember()
         {
@@ -534,18 +447,6 @@ namespace TinyJson.Test
             Assert.AreEqual(0, value.B);
             Assert.AreEqual(789, value.C);
             Assert.AreEqual(0, value.D);
-        }
-
-        class DataMemberObject
-        {
-            [DataMember(Name = "a")]
-            public int A;
-            [DataMember()]
-            public int B;
-
-            [DataMember(Name = "c")]
-            public int C { get; set; }
-            public int D { get; set; }
         }
 
         [TestMethod]
@@ -559,33 +460,27 @@ namespace TinyJson.Test
             Assert.AreEqual(14, value.D);
         }
 
-        public class EnumClass
-        {
-            public Color Colors;
-            public Style Style;
-        }
-
         [TestMethod]
         public void TestEnumMember()
         {
             EnumClass value = "{\"Colors\":\"Green\",\"Style\":\"Bold, Underline\"}".TinyJsonParse<EnumClass>();
             Assert.IsNotNull(value);
-            Assert.AreEqual(Color.Green, value.Colors);
+            Assert.AreEqual(Hue.Green, value.Colors);
             Assert.AreEqual(Style.Bold | Style.Underline, value.Style);
 
             value = "{\"Colors\":3,\"Style\":10}".TinyJsonParse<EnumClass>();
             Assert.IsNotNull(value);
-            Assert.AreEqual(Color.Yellow, value.Colors);
+            Assert.AreEqual(Hue.Yellow, value.Colors);
             Assert.AreEqual(Style.Italic | Style.Strikethrough, value.Style);
 
             value = "{\"Colors\":\"3\",\"Style\":\"10\"}".TinyJsonParse<EnumClass>();
             Assert.IsNotNull(value);
-            Assert.AreEqual(Color.Yellow, value.Colors);
+            Assert.AreEqual(Hue.Yellow, value.Colors);
             Assert.AreEqual(Style.Italic | Style.Strikethrough, value.Style);
 
             value = "{\"Colors\":\"sfdoijsdfoij\",\"Style\":\"sfdoijsdfoij\"}".TinyJsonParse<EnumClass>();
             Assert.IsNotNull(value);
-            Assert.AreEqual(Color.Red, value.Colors);
+            Assert.AreEqual(Hue.Red, value.Colors);
             Assert.AreEqual(Style.None, value.Style);
         }
 
@@ -628,19 +523,6 @@ namespace TinyJson.Test
             Assert.AreEqual(dictionary["hello"], "hell", "The parser stored an incorrect value for the duplicated key");
         }
 
-        public abstract class GenericSimpleObject<T>
-        {
-            public abstract int Id { get; set; }
-            public abstract T Obj { get; set; }
-        }
-
-        public class GenericComplexImp<TValue> : GenericSimpleObject<EnumClass>
-        {
-            public override int Id { get; set; }
-            public TValue AltId { get; set; }
-            public override EnumClass Obj { get; set; }
-        }
-        
         [TestMethod]
         public void TestSimpleGenericObject()
         {
@@ -651,7 +533,7 @@ namespace TinyJson.Test
             sw.Stop();
             Assert.IsNotNull(value1);
             Assert.IsNotNull(value1.Obj);
-            Assert.AreEqual(Color.Green, value1.Obj.Colors);
+            Assert.AreEqual(Hue.Green, value1.Obj.Colors);
             Assert.AreEqual(Style.Bold | Style.Underline, value1.Obj.Style);
             Assert.AreEqual(value1.Id, 32);
             Assert.AreEqual("ALT23", value1.AltId);
@@ -668,6 +550,98 @@ namespace TinyJson.Test
             
             // Expect performance at least as good as newtonsoft (only fair on single test execution)
             // Assert.IsTrue(factor1 <= factor2);
+        }
+       
+        
+        [TestMethod]
+        public void TestFloatingPoints() // helps validate Issue #49
+        {
+            object last = null;
+            Assert.AreEqual(2.5f, last = Serialization.FromJson<float>("2.5", false));
+            Assert.AreEqual(float.MinValue, last = Serialization.FromJson<float>($"{float.MinValue}", false));
+            Assert.AreEqual(float.MaxValue, last = Serialization.FromJson<float>($"{float.MaxValue}", false));
+            
+            Assert.AreEqual(2.5, last = Serialization.FromJson<double>("2.5", false));
+            Assert.AreEqual(double.MinValue, last = Serialization.FromJson<double>($"{double.MinValue}", false));
+            Assert.AreEqual(double.MaxValue, last = Serialization.FromJson<double>($"{double.MaxValue}", false));
+            
+            Assert.AreEqual(2.5m, last = Serialization.FromJson<decimal>("2.5", false));
+            Assert.AreEqual(decimal.MinValue, last = Serialization.FromJson<decimal>($"{decimal.MinValue}", false));
+            Assert.AreEqual(decimal.MaxValue, last = Serialization.FromJson<decimal>($"{decimal.MaxValue}", false));
+        }
+        
+        [TestMethod]
+        public void TestIntegers() // helps validate Issue #49
+        {
+            object last = null;
+            Assert.AreEqual((byte)2, last = Serialization.FromJson<byte>("2", false));
+            Assert.AreEqual(byte.MinValue, last = Serialization.FromJson<byte>($"{byte.MinValue}", false));
+            Assert.AreEqual(byte.MaxValue, last = Serialization.FromJson<byte>($"{byte.MaxValue}", false));
+            
+            Assert.AreEqual((sbyte)2, last = Serialization.FromJson<sbyte>("2", false));
+            Assert.AreEqual(sbyte.MinValue, last = Serialization.FromJson<sbyte>($"{sbyte.MinValue}", false));
+            Assert.AreEqual(sbyte.MaxValue, last = Serialization.FromJson<sbyte>($"{sbyte.MaxValue}", false));
+            
+            Assert.AreEqual((short)2, last = Serialization.FromJson<short>("2", false));
+            Assert.AreEqual(short.MinValue, last = Serialization.FromJson<short>($"{short.MinValue}", false));
+            Assert.AreEqual(short.MaxValue, last = Serialization.FromJson<short>($"{short.MaxValue}", false));
+            
+            Assert.AreEqual((ushort)2, last = Serialization.FromJson<ushort>("2", false));
+            Assert.AreEqual(ushort.MinValue, last = Serialization.FromJson<ushort>($"{ushort.MinValue}", false));
+            Assert.AreEqual(ushort.MaxValue, last = Serialization.FromJson<ushort>($"{ushort.MaxValue}", false));
+            
+            Assert.AreEqual((int)2, last = Serialization.FromJson<int>("2", false));
+            Assert.AreEqual(int.MinValue, last = Serialization.FromJson<int>($"{int.MinValue}", false));
+            Assert.AreEqual(int.MaxValue, last = Serialization.FromJson<int>($"{int.MaxValue}", false));
+            
+            Assert.AreEqual((uint)2, last = Serialization.FromJson<uint>("2", false));
+            Assert.AreEqual(uint.MinValue, last = Serialization.FromJson<uint>($"{uint.MinValue}", false));
+            Assert.AreEqual(uint.MaxValue, last = Serialization.FromJson<uint>($"{uint.MaxValue}", false));
+            
+            Assert.AreEqual((long)2, last = Serialization.FromJson<long>("2", false));
+            Assert.AreEqual(long.MinValue, last = Serialization.FromJson<long>($"{long.MinValue}", false));
+            Assert.AreEqual(long.MaxValue, last = Serialization.FromJson<long>($"{long.MaxValue}", false));
+            
+            Assert.AreEqual((ulong)2, last = Serialization.FromJson<ulong>("2", false));
+            Assert.AreEqual(ulong.MinValue, last = Serialization.FromJson<ulong>($"{ulong.MinValue}", false));
+            Assert.AreEqual(ulong.MaxValue, last = Serialization.FromJson<ulong>($"{ulong.MaxValue}", false));
+        }
+        
+        [TestMethod]
+        public void TestMiscPrimitives() // helps validate Issue #49
+        {
+            object last = null;
+            Assert.AreEqual(true, last = Serialization.FromJson<bool>("true", false));
+            Assert.AreEqual(true, last = Serialization.FromJson<bool?>("true", false));
+            Assert.AreEqual(false, last = Serialization.FromJson<bool>("false", false));
+            Assert.AreEqual(false, last = Serialization.FromJson<bool?>("false", false));
+            Assert.IsNull(last = Serialization.FromJson<bool?>("", false));
+            Assert.IsNull(last = Serialization.FromJson<bool?>("null", false));
+            
+            Assert.AreEqual('c', last = Serialization.FromJson<char>("\"c\"", false));
+            Assert.AreEqual('¥', last = Serialization.FromJson<char?>("\"¥\"", false));
+            Assert.IsNull(last = Serialization.FromJson<char?>("", false));
+            Assert.IsNull(last = Serialization.FromJson<char?>("null", false));
+        }
+        
+        [TestMethod]
+        public void TestEnums() // helps validate Issue #49
+        {
+            object last = null;
+            Assert.AreEqual(Hue.Green, last = Serialization.FromJson<Hue>("\"Green\"", false));
+            Assert.AreEqual(Hue.Green, last = Serialization.FromJson<Hue>("1", false));
+            
+            Assert.AreEqual(Hue.Green, last = Serialization.FromJson<Hue?>("\"Green\"", false));
+            Assert.AreEqual(Hue.Green, last = Serialization.FromJson<Hue?>("1", false));
+            
+            Assert.AreEqual(Hue.Red, last = Serialization.FromJson<Hue>("\"green\"", false));
+            Assert.IsNull(last = Serialization.FromJson<Hue?>("\"green\"", false));
+            Assert.AreEqual(Hue.Green, last = Serialization.FromJson<Hue>("\"green\"", true));
+            Assert.AreEqual(Hue.Green, last = Serialization.FromJson<Hue?>("\"green\"", true));
+            
+            Assert.IsNull(last = Serialization.FromJson<Hue?>("\"\"", false));
+            Assert.IsNull(last = Serialization.FromJson<Hue?>("", false));
+            Assert.IsNull(last = Serialization.FromJson<Hue?>("null", false));
         }
         
     }
