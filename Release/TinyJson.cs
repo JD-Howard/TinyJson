@@ -48,24 +48,8 @@ namespace TinyJson
             //Remove all whitespace not within strings to make parsing simpler
             stringBuilder.Length = 0;
             
-            // The removal of whitespace adds an average of 60ms on the "PerformanceTest" 
-            // This problem scales relative to the size of the json being parsed. 
-            for (int i = 0; i < json.Length; i++)
-            {
-                char c = json[i];
-                if (c == '"')
-                {
-                    i = AppendUntilStringEnd(true, i, json);
-                    continue;
-                }
-                if (char.IsWhiteSpace(c))
-                    continue;
-
-                stringBuilder.Append(c);
-            }
-
-            //Parse the thing!
-            return (T)ParseValue(typeof(T), stringBuilder.ToString(), ignoreEnumCase);
+            // all tests still pass after removing leading/trailing whitespace and making Split() short circuit on whitespace
+            return (T)ParseValue(typeof(T), json.Trim(), ignoreEnumCase);
         }
 
         static int AppendUntilStringEnd(bool appendEscapeCharacter, int startIdx, string json)
@@ -102,7 +86,11 @@ namespace TinyJson
             stringBuilder.Length = 0;
             for (int i = 1; i < json.Length - 1; i++)
             {
-                switch (json[i])
+                char ch = json[i];
+                if (char.IsWhiteSpace(ch))
+                    continue;
+                
+                switch (ch)
                 {
                     case '[':
                     case '{':
@@ -142,7 +130,8 @@ namespace TinyJson
 
             if (type.IsClass)
                 goto ClassHandlers;
-            
+
+            Nullable<bool> da = false;
             var nestedType = Nullable.GetUnderlyingType(type);
             var isNullable = nestedType != null;
             if (isNullable)
@@ -152,7 +141,7 @@ namespace TinyJson
                 return ParsePrimitiveValue(type, json, isNullable);
             
             if (type.IsEnum)
-                return ParseEnumValue(type, json, ignoreEnumCase);
+                return ParseEnumValue(type, json, ignoreEnumCase, isNullable);
             
             if (type == typeof(decimal)) // Outlier not captured by Type.IsPrimitive
                 return ParseNumberTypes<decimal>(decimal.TryParse, json, isNullable, NumberStyles.Float);
@@ -285,17 +274,17 @@ namespace TinyJson
             return ParseObject(type, json, ignoreEnumCase);
         }
 
-        private static object ParseEnumValue(Type type, string json, bool ignoreEnumCase)
+        private static object ParseEnumValue(Type type, string json, bool ignoreEnumCase, bool isNullable)
         {
             if (json.FirstOrDefault() == '"')
-                json = json.Substring(1, json.Length - 2);
+                json = ParseStringValue(json);
             try
             {
                 return Enum.Parse(type, json, ignoreEnumCase); // This will handle a name or value
             }
             catch
             {
-                return Activator.CreateInstance(type); // creates the default value for Enum
+                return isNullable ? null : Activator.CreateInstance(type); // creates the default value for Enum
             }
         }
 
@@ -333,11 +322,18 @@ namespace TinyJson
             
             if (type == typeof(double))
                 return ParseNumberTypes<double>(double.TryParse, json, isNullable, NumberStyles.Float);
-            
-            if (type == typeof(char))
-                return json.Length == 1 ? json[0] : isNullable ? (char?)null : default(char);
-            
-            return null;
+
+            if (type != typeof(char))
+                return null;
+
+            if (json.Length == 1)
+                return json[0];
+
+            if (isNullable && json == NullValue)
+                return null;
+
+            var ch = ParseStringValue(json);
+            return isNullable && string.IsNullOrEmpty(ch) ? (char?)null : ch.FirstOrDefault();
         }
 
         
@@ -367,10 +363,13 @@ namespace TinyJson
         }
         
 
-        private static object ParseStringValue(string json)
+        private static string ParseStringValue(string json)
         {
             if (json.Length <= 2)
                 return string.Empty;
+            
+            if (json == NullValue) // Issue #48
+                return null;
                 
             StringBuilder parseStringBuilder = new StringBuilder(json.Length);
             for (int i = 1; i < json.Length - 1; ++i)
@@ -426,22 +425,20 @@ namespace TinyJson
             }
             
             if (json[0] == '"' && json[json.Length - 1] == '"')
-                return ParseStringValue(json);
+                return ParseStringValue(json); // Issue #29
             
             if (char.IsDigit(json[0]) || json[0] == '-')
             {
                 if (json.Contains("."))
-                {
-                    double result;
-                    double.TryParse(json, NumberStyles.Float, CultureInfo.InvariantCulture, out result);
-                    return result;
-                }
-                else
-                {
-                    int result;
-                    int.TryParse(json, out result);
-                    return result;
-                }
+                    return double.TryParse(json, NumberStyles.Float, CultureInfo.InvariantCulture, out var dbl) ? dbl : (double?)null;
+                
+                if (long.TryParse(json, NumberStyles.Integer, CultureInfo.InvariantCulture, out var num) == false) 
+                    return null;
+                
+                if (num > int.MaxValue || num < int.MinValue) 
+                    return num; // issue #32: enable long return to prevent data loss
+                
+                return (int) num;
             }
             if (json.Equals("true", StringComparison.InvariantCultureIgnoreCase))
                 return true;
@@ -538,6 +535,8 @@ namespace TinyJson
         }
     }
 }
+using System.Text.RegularExpressions;
+
 namespace TinyJson
 {
     using System;
@@ -672,7 +671,10 @@ namespace TinyJson
                     strBuilder.Append(',');
                 
                 if (isStringKey)
-                    strBuilder.Append($"\"{key}\":");
+                {
+                    AppendStringValue(strBuilder, key.ToString());
+                    strBuilder.Append(':');
+                }
                 else
                 { 
                     if (isWrapped)
@@ -902,7 +904,7 @@ namespace System
         /// Extension method for converting an object to a JSON string with tab indentation using the TinyJson library.
         /// </summary>
         /// <inheritdoc cref="TinyJsonConvert(object, bool)"/>
-        public static string TinyJsonTabConvert(this object item, bool includeNulls = true)
+        public static string TinyJsonTabConvert(this object item, bool includeNulls = false)
             => TinyJson.Serialization.ToJson(item, includeNulls, true);
 
         /// <summary>
