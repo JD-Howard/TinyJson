@@ -3,7 +3,7 @@ name: TinyJson Simple Release Updater
 on:
   push:
     branches: [ "main" ]
-    paths: [ "**.cs", "**.csproj" ]
+    paths: [ "**.cs", "**.csproj", "**.yml" ]
   workflow_dispatch:
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
         with:
           dotnet-version: 8.x      
       - run: | 
-          dotnet build "${{ github.workspace }}\json.sln" --configuration "Release"
+          dotnet build "${{ github.workspace }}\TinyJson.sln" --configuration "Release"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
           git config --global user.name ${{ github.actor }}
           git add -f "${{ github.workspace }}\Release\TinyJson.cs"

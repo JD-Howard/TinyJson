@@ -1,21 +1,27 @@
 # Tiny Json
-This will a non-trivial revision to the original [zanders3/json](https://github.com/zanders3/json) project by Alex Parker. I've incorporated notable additions from other forks and uncommitted PRs. TinyJson hasn't been that tiny in recent years, but my goal is to reorganize and enhance the project while remaining under 1000 lines in a single *.cs file output.
+This is a non-trivial revision to the original [zanders3/json](https://github.com/zanders3/json) project by Alex Parker. I've incorporated notable additions from other forks, uncommitted PRs, and resolved various issues. TinyJson hasn't been that tiny in recent years, but my goal is to reorganize and enhance the project while remaining under 1000 lines in a single *.cs file output.
 
 ## TLDR:
-The interface of this library is considered to be self-documenting and simple to understand, just go read the public interface comments in the `TinyJsonSystemExtensions.cs` file.
+The interface of this library is considered to be self-documenting and simple to understand, just go read the XML Documentation comments in the [TinyJsonSystemExtensions.cs](https://github.com/JD-Howard/TinyJson/blob/main/src/TinyJsonSystemExtensions.cs) file.
 
 TinyJson is a great option if you:
 - Don't want additional dependencies.
   - Supply chain attack surface reduction was definitively one of my motivations.
   - this is configured for NetStandard2.0 targeting, but if your importing this code directly into your project, then you may need to upgrade your CSPROJ LangVersion attribute to 8.
-- Don't have complex JSON needs.
+- Don't have complex JSON needs. TinyJson does have:
+  - Parse operations that always ignore property/field casing.
+  - Has fairly robust support for nullable & generic types.
+  - Does support a limited set of attribute modifiers such as IgnoreDataMember & DataMember(name ="").
+  - All serialized structs/objects require default constructors.
+  - Does NOT support abstract or interface types, but will of course work with their concrete inheritors.
 - Need to work with lots of small JSON chunks.
   - Meets or beats Newtonsoft performance for small items.
 - Don't need to work with large JSON files.
-  - Parsing is 2/3 slower than Newtonsoft on a fairly nested 8MB file.
+  - Newtonsoft is 2x faster than TinyJson at parsing a fairly nested (many) small-object 8MB file.
 
 You can find a 1-file merged CS output with no external dependencies in the Release folder. This folder also contains a DLL if your incapable of upgrading your CPROJ C# LangVersion attribute. I suggest using the CS file, doing a search/replace on `public static` for `internal static`, and just using it in isolation. I tend to stick this in my "shared" NetStandard DLL with internal/static and use `InternalsVisibleTo` to expose the functionality for my consumer projects.
 
+**NOTE:** Given that I don't really want or need to dig into the lingering _performance at scale_ parsing issue, this project update is largely complete at this point. There will be additional updates, especially in the area of unit testing, but this should be fairly close to the functional, 1-file, works everywhere, json capabilities that I needed. **Absolutely interested in pull requests if you want to help improve the functionality or expand unit tests.**
 
 
 ## Change Log
@@ -43,7 +49,7 @@ For me, the intent of this project is to internalize these files into another pr
 - Migrated the DefaultValueAttribute handler from the [SpecFlow](https://github.com/SpecFlowOSS/SpecFlow.Internal.Json) fork.
 
 **NOTE:** 
-It has become clear that this will never perform at the level it should while using a StringBuilder. In order to fix this, a single-pass char[] strategy closer to the way SimpleJson parses would need to be deployed. I will continue to get this where I need it for my immediate netstandard needs, but *it would be ill-advised to use TinyJson on truly large json files;* such as +50MB. Also, I may in fact fork/migrate/update SimpleJson too given this large implementation limitation.
+It has become clear that this will never perform at the level it should while using a StringBuilder. In order to fix this, a single-pass char[] strategy closer to the way SimpleJson parses would need to be deployed. I will continue to get this where I need it for my immediate netstandard needs, but *it would be ill-advised to use TinyJson on truly large json files;* such as +50MB. ~~Also, I may in fact fork/migrate/update SimpleJson too given this large implementation limitation.~~ Update: [SimpleJson](https://github.com/facebook-csharp-sdk/simple-json) is fast, but it is doing very strange/non-standard serialization and not a viable option...
 
 
 #### JSONWriter.cs Changes:
@@ -104,3 +110,36 @@ After implementing PR #34 Tab Indentation by alexkrnet, the 8MB TinyJson output 
 - Tested the IncludeNull behavior flag.
   - Tested various forms of nullables with and without the includeNull flag.
 - Added test for the `TinyJsonTabConvert()` Tab Formatted output type.
+
+
+### 2024-08-07 Commit [176555e](https://github.com/JD-Howard/TinyJson/commit/176555e4e30f8c2fedba39790cbc9fcaf9ea7cf4)
+This update largely addresses any low-hanging fruit issues identified in the original projects issue tracker. This included a review of closed issues to ensure nothing was missed or improperly rejected. This does not mean 100% of the issue items have been addressed, there are always "nice to haves" or "insufficient" issues that may be too much trouble to resolve.
+
+- Issue #50: Resolved string key escaping, double checked against Newtons output.
+- Issue #49: Nullable Support, this was previously fixed, but now properly tested.
+- Issue #48: Strings that were serialized as null will now parse to null.
+- Issue #32: Anonymous object data loss by only returning int data type.
+- Issue #29: Anonymous object strings not being un-escaped was fixed in previous update.
+- Issue #13: Expanding Dictionary Key options was originally rejected by the project owner, but I technically added this functionality in the 2024/08/05 update.
+- Issue #11: This was already fixed but I added tests to confirm the fix.
+
+#### Project File Changes:
+- Went ahead and finished renaming everything to actually say "TinyJson" to remove the ambiguity.
+
+#### JSONParser.cs Changes:
+- Improved performance by implementing a new strategy that uses `Trim()` to remove leading/trailing whitespace and added a `char.IsWhiteSpace() => continue` behavior to the internal character iterations. This doesn't solve the exponential performance difference with other parsers (Newtonsoft baseline) on large files, but it did change from 2/3 slower to 1/2 slower on the large file baseline I've been using.
+- Bug Fix: Nullable<enum> can now properly be read as null.
+- Bug Fix: Nullable<char> can now properly be read as null and consistently extracted from quotes.
+
+#### JSONWriter.cs Changes:
+- Bug Fix: Dictionary string keys are now properly un-escaped.
+
+#### Test Changes:
+Still a lot of work to do on unit testing, but I have started the process of migrating all the model stubs into their own folders/files so they can be shared between test fixtures.
+- Added or expanded tests, that should fully cover parsing concrete and nullable forms of IsPrimitive, IsEnum, and is typeof(decimal).
+- Expanded the string escaping tests.
+- Added or expanded tests to support various Issue# resolutions; see above.
+- Merged the ArrayTest & ListTest into a CollectionTest methods to be more DRY.
+  - Also expanded the related tests for some edge cases.
+
+ 
