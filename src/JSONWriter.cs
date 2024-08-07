@@ -1,6 +1,4 @@
-﻿using System.Text.RegularExpressions;
-
-namespace TinyJson
+﻿namespace TinyJson
 {
     using System;
     using System.Collections;
