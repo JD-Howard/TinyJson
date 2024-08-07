@@ -535,8 +535,6 @@ namespace TinyJson
         }
     }
 }
-using System.Text.RegularExpressions;
-
 namespace TinyJson
 {
     using System;
